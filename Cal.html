@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数字金额自动汇总与明细核对</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 750px; margin: 20px auto; padding: 20px; background: #f4f6f8; color: #333; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+        h2 { margin-top: 0; color: #1d1d1f; text-align: center; }
+        textarea { width: 100%; height: 110px; padding: 12px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 14px; margin-bottom: 15px; resize: vertical; }
+        button { width: 100%; padding: 12px; background: #0071e3; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #005bb5; }
+        
+        .section-title { font-size: 16px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; color: #0071e3; border-bottom: 2px solid #e5e5ea; padding-bottom: 5px; }
+        .group-box { background: #fafafa; border: 1px solid #eaeaea; border-radius: 6px; padding: 10px; font-size: 13px; line-height: 1.6; max-height: 150px; overflow-y: auto; }
+        .detail-box { background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; padding: 12px; font-size: 14px; line-height: 1.8; }
+        .result-box { background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 6px; padding: 12px; font-size: 15px; }
+        
+        .result-item { margin: 6px 0; font-weight: 500; }
+        .total { font-size: 18px; font-weight: bold; color: #d70015; margin-top: 15px; border-top: 2px dashed #ff4d4f; padding-top: 10px; }
+        .num-tag { font-weight: bold; color: #d46b08; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>数字金额计算与核对工具</h2>
+    <textarea id="inputText" placeholder="在此粘贴你的文本..."></textarea>
+    <button onclick="calculate()">开始计算与核对</button>
+
+    <div id="output" style="display:none;">
+        <div class="section-title">📍 第一步：拆解出的原始分组明细</div>
+        <div id="step1" class="group-box"></div>
+
+        <div class="section-title">🔍 第二步：每个数字的具体加和核对明细</div>
+        <div id="step2" class="detail-box"></div>
+
+        <div class="section-title">📊 第三步：归类汇总结果（金额：对应的数字）</div>
+        <div id="step3" class="result-box"></div>
+    </div>
+</div>
+
+<script>
+function calculate() {
+    const text = document.getElementById('inputText').value.trim();
+    if (!text) {
+        alert('请先粘贴文本！');
+        return;
+    }
+
+    // 容许空格与多种分隔符的强力正则
+    const regex = /([0-9.\s、，,;；]+?)\s*(?:各|买)\s*(\d+)/g;
+    let match;
+    let groupIndex = 1;
+    const groups = [];
+    const numberDetails = {};
+
+    while ((match = regex.exec(text)) !== null) {
+        const rawNumsStr = match[1];
+        const amount = parseInt(match[2], 10);
+        
+        // 直接提取纯数字，自动忽视空格和尾部多余点号
+        const rawDigits = rawNumsStr.match(/\d+/g);
+        if (!rawDigits) continue;
+
+        const nums = rawDigits.map(n => String(parseInt(n, 10)).padStart(2, '0'));
+
+        groups.push({
+            id: groupIndex++,
+            nums: nums,
+            amount: amount
+        });
+
+        nums.forEach(n => {
+            if (!numberDetails[n]) {
+                numberDetails[n] = [];
+            }
+            numberDetails[n].push(amount);
+        });
+    }
+
+    const sortedNums = Object.keys(numberDetails).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+
+    if (sortedNums.length === 0) {
+        alert('未能识别到有效数据，请检查文本格式！');
+        return;
+    }
+
+    // 第一步：展示原始分组
+    let step1Html = '';
+    groups.forEach(g => {
+        step1Html += `<div><strong>第 ${g.id} 组：</strong> ${g.nums.join('.')} 各 ${g.amount} 元</div>`;
+    });
+    document.getElementById('step1').innerHTML = step1Html;
+
+    // 第二步：各数字累加明细
+    let step2Html = '';
+    const amountToNumbers = {};
+
+    sortedNums.forEach(num => {
+        const amountsList = numberDetails[num];
+        const sum = amountsList.reduce((a, b) => a + b, 0);
+
+        const formula = amountsList.join(' + ');
+        step2Html += `<div>数字 <span class="num-tag">${num}</span>：${formula} = <strong>${sum}元</strong> (共${amountsList.length}次)</div>`;
+
+        if (!amountToNumbers[sum]) {
+            amountToNumbers[sum] = [];
+        }
+        amountToNumbers[sum].push(num);
+    });
+    document.getElementById('step2').innerHTML = step2Html;
+
+    // 第三步：归类汇总与总额
+    let step3Html = '';
+    let totalSum = 0;
+    const sortedAmounts = Object.keys(amountToNumbers).map(Number).sort((a, b) => b - a);
+
+    sortedAmounts.forEach(amt => {
+        const numsStr = amountToNumbers[amt].join('.');
+        const count = amountToNumbers[amt].length;
+        totalSum += amt * count;
+        step3Html += `<div class="result-item"><strong>${amt}元</strong>：${numsStr}</div>`;
+    });
+
+    step3Html += `<div class="total">💰 总金额：${totalSum} 元</div>`;
+    document.getElementById('step3').innerHTML = step3Html;
+
+    document.getElementById('output').style.display = 'block';
+}
+</script>
+
+</body>
+</html>
